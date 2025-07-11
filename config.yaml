@@ -1,0 +1,47 @@
+# Soccer Agent Configuration
+
+# OpenAI Configuration
+openai:
+  model: "gpt-4"
+  temperature: 0.7
+  max_tokens: 1000
+
+# StatsBomb Configuration
+statsbomb:
+  default_competitions: [43, 49, 72, 39]  # Eredivisie, Premier League, La Liga, Serie A
+  default_season: 3
+  rate_limit_delay: 0.1  # seconds between requests
+
+# Machine Learning Configuration
+ml:
+  models:
+    - random_forest
+    - gradient_boosting
+    - linear_regression
+  test_size: 0.2
+  random_state: 42
+  cross_validation_folds: 5
+
+# Web Scraping Configuration
+scraping:
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+  timeout: 10
+  retry_attempts: 3
+
+# Analysis Configuration
+analysis:
+  default_years_ahead: 3
+  confidence_threshold: 0.5
+  min_data_points: 10
+
+# Output Configuration
+output:
+  save_reports: true
+  report_format: "json"
+  include_raw_data: false
+
+# Logging Configuration
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "soccer_agent.log" 
