@@ -1,9 +1,11 @@
-# OpenAI API Configuration
-OPENAI_API_KEY=your_openai_api_key_here
+# Optional: For Transfermarkt data
+RAPID_API_KEY=your_rapidapi_key_here
 
-# Optional: Other API keys for additional data sources
-FOOTBALL_API_KEY=your_football_api_key_here
-TRANSFERMARKT_API_KEY=your_transfermarkt_api_key_here
+# Optional: For Telegram bot
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
+
+# Optional: For future ML features
+OPENAI_API_KEY=your_openai_api_key_here
 
 # Database configuration (optional)
 DATABASE_URL=sqlite:///soccer_agent.db 

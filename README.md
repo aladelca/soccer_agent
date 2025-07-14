@@ -1,15 +1,16 @@
 # Soccer Agent - Intelligent Football Player Analysis
 
-An intelligent agent for comprehensive football player analysis using StatsBomb data, machine learning, and LLMs.
+An intelligent conversational agent for comprehensive football player analysis using StatsBomb data, Transfermarkt information, and advanced analytics.
 
 ## 🚀 Features
 
-- **General Performance Analysis**: Complete evaluation of a player's performance
-- **Match-Specific Analysis**: Detailed analysis of performance in specific matches
-- **Potential Prediction**: ML models to predict future performance
-- **Interactive Chat**: Natural conversations with the agent using LangChain
-- **Multi-Source Data**: StatsBomb Open Data + web scraping
-- **Comprehensive Reports**: Complete analysis with visualizations
+- **Conversational Interface**: Interactive agent that handles multiple search results and user selection
+- **Player Performance Analysis**: Complete evaluation of a player's performance using StatsBomb data
+- **Career Statistics**: Comprehensive career overview with aggregated metrics
+- **Transfer Market Data**: Player market value and transfer history from Transfermarkt
+- **Multi-Source Data**: StatsBomb Open Data + Transfermarkt + web scraping
+- **Session Management**: Maintains conversation state for multiple users
+- **Telegram Bot Support**: Ready-to-use Telegram bot implementation
 
 ## 📋 Requirements
 
@@ -35,9 +36,16 @@ pip install -r requirements.txt
 cp env_example.txt .env
 ```
 
-Edit the `.env` file and add your OpenAI API key:
+Edit the `.env` file and add your API keys:
 ```
-OPENAI_API_KEY=your_api_key_here
+# Optional: For Transfermarkt data
+RAPID_API_KEY=your_rapidapi_key_here
+
+# Optional: For Telegram bot
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
+
+# Optional: For future ML features
+OPENAI_API_KEY=your_openai_api_key_here
 ```
 
 ## 🎯 Quick Start
@@ -48,156 +56,246 @@ OPENAI_API_KEY=your_api_key_here
 jupyter notebook notebooks/soccer_agent_demo.ipynb
 ```
 
-### Programmatic Usage
+### Conversational Usage
 ```python
 from src.soccer_agent import SoccerAgent
 
 # Initialize the agent
 agent = SoccerAgent()
 
-# General player analysis
-analysis = agent.analyze_player_general_performance("Dusan Tadic")
+# Handle user messages
+user_id = "user123"
+response = agent.handle_message(user_id, "Messi")
+print(response)
 
-# Match-specific analysis
-match_analysis = agent.analyze_match_performance("Dusan Tadic", match_id=7532)
+# User selects from results
+response = agent.handle_message(user_id, "1")
+print(response)
 
-# Potential prediction
-potential = agent.predict_player_potential("Dusan Tadic", years_ahead=3)
+# User confirms
+response = agent.handle_message(user_id, "yes")
+print(response)
+```
 
-# Interactive chat
-response = agent.chat_with_agent("What are this player's strengths?")
+### Direct Data Access
+```python
+from src.data_collector import StatsBombDataCollector, WebScraper
+
+# Get StatsBomb data
+statsbomb = StatsBombDataCollector()
+career_data = statsbomb.get_player_career_data("Lionel Messi")
+
+# Get Transfermarkt data
+scraper = WebScraper()
+transfermarkt_data = scraper.get_transfermarkt_data("Lionel Messi")
 ```
 
 ## 📊 Main Features
 
-### 1. General Performance Analysis
-- Pass, shot, dribble metrics
+### 1. Conversational Interface
+- Interactive agent that handles multiple search results
+- User selection from multiple players with same name
+- Confirmation flow for accurate player selection
+- Session management for multiple users
+
+### 2. Player Performance Analysis
+- Pass, shot, dribble metrics from StatsBomb
 - Comparison with position standards
 - Identification of strengths and weaknesses
 - Improvement recommendations
 
-### 2. Match-Specific Analysis
-- Performance in specific matches
-- Key moments and contributions
-- Comparison with career averages
-- Team impact
+### 3. Career Statistics
+- Comprehensive career overview
+- Aggregated metrics across competitions
+- Performance trends and patterns
+- Historical data analysis
 
-### 3. Potential Prediction
-- Machine learning models
-- 1-5 year predictions
-- Influencing factors
-- Confidence levels
-
-### 4. Interactive Chat
-- Natural conversations
-- Conversation memory
-- Contextual responses
-- Personalized analysis
+### 4. Transfer Market Data
+- Market values from Transfermarkt
+- Transfer history and career moves
+- Club performance data
+- Contract and valuation information
 
 ## 🏗️ Architecture
 
 ```
 soccer_agent/
 ├── src/
-│   ├── data_collector.py      # Data collection
-│   ├── ml_predictor.py        # ML models
-│   └── soccer_agent.py        # Main agent
+│   ├── data_collector.py      # Data collection and analysis
+│   └── soccer_agent.py        # Conversational agent
+├── examples/
+│   ├── simple_agent_example.py # Basic usage example
+│   └── telegram_bot_example.py # Telegram bot implementation
 ├── notebooks/
 │   ├── first_notebook.ipynb   # Original notebook
 │   └── soccer_agent_demo.ipynb # Complete demo
-├── models/                    # Trained models
-├── requirements.txt           # Dependencies
+├── requirements.txt           # All dependencies
 └── README.md                 # This file
 ```
 
 ## 🔧 Technical Components
 
 ### Data Collector
-- **StatsBombDataCollector**: Access to StatsBomb open data
-- **WebScraper**: Scraping additional metrics
-- **DataAggregator**: Aggregation from multiple sources
-
-### ML Predictor
-- **PlayerPerformancePredictor**: Prediction models
-- **Feature Engineering**: Feature preparation
-- **Model Training**: Training and evaluation
+- **StatsBombDataCollector**: Access to StatsBomb open data and player analysis
+- **WebScraper**: Transfermarkt data collection and player search
+- **DataAggregator**: Combines data from multiple sources
 
 ### Soccer Agent
-- **OpenAI Integration**: LLM for analysis
-- **LangChain**: Conversation management
-- **Comprehensive Analysis**: Complete reports
+- **SoccerAgent**: Main conversational agent
+- **PlayerSelectionFlow**: Handles user selection and conversation states
+- **Session Management**: Multi-user conversation tracking
+- **Comprehensive Analysis**: Complete player reports
 
 ## 📈 Data Sources
 
 ### StatsBomb Open Data
-- Match events
-- Player metrics
-- Tactical data
-- Competition information
+- Match events and player actions
+- Detailed player metrics and statistics
+- Tactical data and formations
+- Competition and match information
 
-### Web Scraping
-- Transfermarkt (market value)
-- Additional statistics
-- Contract information
+### Transfermarkt
+- Player market values
+- Transfer history and career moves
+- Club performance data
+- Contract information and valuations
 
-## 🤖 Machine Learning Models
+## 🤖 Conversational Features
 
-- **Random Forest**: Performance prediction
-- **Gradient Boosting**: Advanced models
-- **Linear Regression**: Trend analysis
-- **Feature Importance**: Key factor identification
+- **Multi-result Search**: Handles multiple players with same name
+- **User Selection**: Interactive selection from search results
+- **Confirmation Flow**: Ensures accurate player selection
+- **Session Management**: Maintains conversation state per user
+- **Rich Reports**: Comprehensive player analysis with formatting
 
 ## 📝 Usage Examples
 
-### Complete Analysis
+### Conversational Analysis
 ```python
-# Comprehensive report
-report = agent.get_comprehensive_report("Dusan Tadic", match_id=7532)
-print(report['summary'])
+# Search for a player
+response = agent.handle_message("user123", "Messi")
+print(response)
+
+# Select from results
+response = agent.handle_message("user123", "1")
+print(response)
+
+# Confirm selection
+response = agent.handle_message("user123", "yes")
+print(response)
 ```
 
-### Custom Chat
+### Direct Data Access
 ```python
-# Specific questions
-response = agent.chat_with_agent("How does this player compare to other forwards?")
+# Get StatsBomb career data
+statsbomb = StatsBombDataCollector()
+career_data = statsbomb.get_player_career_data("Lionel Messi")
+
+# Get Transfermarkt data
+scraper = WebScraper()
+transfermarkt_data = scraper.get_transfermarkt_data("Lionel Messi")
 ```
 
-### Predictions
-```python
-# 5-year prediction
-potential = agent.predict_player_potential("Player", years_ahead=5)
+### Telegram Bot
+```bash
+# Set your bot token
+export TELEGRAM_BOT_TOKEN="your_bot_token"
+
+# Run the bot
+python examples/telegram_bot_example.py
 ```
 
 ## 🔍 Data Exploration
 
 ### Available Competitions
 ```python
-competitions = agent.get_available_competitions()
-print(pd.DataFrame(competitions))
+from src.data_collector import StatsBombDataCollector
+
+statsbomb = StatsBombDataCollector()
+competitions = statsbomb.get_competitions()
+print(competitions)
 ```
 
-### Matches by Competition
+### Player Search
 ```python
-matches = agent.get_available_matches(competition_id=43, season_id=3)
-print(f"Total matches: {len(matches)}")
+from src.data_collector import WebScraper
+
+scraper = WebScraper()
+results = scraper.search_players_with_selection("Messi")
+for result in results:
+    print(f"{result.player_name} - {result.club}")
 ```
 
-## 📊 Visualizations
+## 📊 Analysis Features
 
-The agent includes automatic visualizations:
-- Pass accuracy charts
-- Shot analysis
-- Dribble success rates
-- Potential predictions
+The agent provides comprehensive analysis:
+- Player performance statistics
+- Career overview and trends
+- Transfer market information
+- Technical metrics and insights
 
 ## 🚀 Next Steps
 
 - [ ] Web interface with Streamlit
-- [ ] More data sources
-- [ ] Advanced ML models
+- [ ] More data sources (FIFA, Opta, etc.)
+- [ ] Advanced ML models for predictions
 - [ ] Complete team analysis
 - [ ] REST API
 - [ ] Persistent database
+- [ ] Player comparisons
+- [ ] Real-time match analysis
+
+## 🔧 Troubleshooting
+
+### Environment Variables Not Found
+If you get errors about missing environment variables:
+
+1. **Create `.env` file**:
+```bash
+cp env_example.txt .env
+```
+
+2. **Add your API keys** to the `.env` file:
+```bash
+RAPID_API_KEY=your_actual_rapidapi_key_here
+TELEGRAM_BOT_TOKEN=your_actual_telegram_bot_token_here
+OPENAI_API_KEY=your_actual_openai_api_key_here
+```
+
+3. **Test environment loading**:
+```bash
+python test_env.py
+```
+
+### Telegram Bot Issues
+If you get Telegram bot errors:
+
+1. **Install correct version**:
+```bash
+pip install python-telegram-bot==20.7
+```
+
+2. **Check bot token**:
+```bash
+python test_env.py
+```
+
+3. **Test basic functionality**:
+```bash
+python examples/simple_telegram_bot.py
+```
+
+4. **For full bot functionality**:
+```bash
+python install_telegram.py
+python examples/telegram_bot_example.py
+```
+
+### Basic Functionality Test
+Test core functionality without API keys:
+```bash
+python test_basic.py
+```
 
 ## 🤝 Contributions
 

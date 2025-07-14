@@ -10,11 +10,25 @@ from mplsoccer import Sbopen
 import requests
 from bs4 import BeautifulSoup
 import time
-from typing import Dict, List, Optional, Tuple
+import os
+from typing import Dict, List, Optional, Tuple, Any
 import logging
+from dataclasses import dataclass
 
-logging.basicConfig(level=logging.INFO)
+# Setup logging with line numbers
+logging.basicConfig(
+    format='%(asctime)s - [%(filename)s:%(lineno)d] - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
 logger = logging.getLogger(__name__)
+
+@dataclass
+class PlayerSearchResult:
+    """Data class for player search results"""
+    player_id: str
+    player_name: str
+    club: str
+    confidence_score: float
 
 class StatsBombDataCollector:
     """Collects data from StatsBomb Open Data"""
@@ -25,7 +39,11 @@ class StatsBombDataCollector:
     def get_competitions(self) -> pd.DataFrame:
         """Get all available competitions"""
         try:
-            return sb.competitions()
+            result = sb.competitions()
+            if isinstance(result, pd.DataFrame):
+                return result
+            else:
+                return pd.DataFrame()
         except Exception as e:
             logger.error(f"Error fetching competitions: {e}")
             return pd.DataFrame()
@@ -33,7 +51,11 @@ class StatsBombDataCollector:
     def get_matches(self, competition_id: int, season_id: int) -> pd.DataFrame:
         """Get matches for a specific competition and season"""
         try:
-            return sb.matches(competition_id=competition_id, season_id=season_id)
+            result = sb.matches(competition_id=competition_id, season_id=season_id)
+            if isinstance(result, pd.DataFrame):
+                return result
+            else:
+                return pd.DataFrame()
         except Exception as e:
             logger.error(f"Error fetching matches: {e}")
             return pd.DataFrame()
@@ -585,7 +607,7 @@ class StatsBombDataCollector:
                 'analysis': {}
             }
     
-    def get_player_career_data(self, player_name: str, competitions: List[int] = None) -> Dict:
+    def get_player_career_data(self, player_name: str, competitions: Optional[List[int]] = None) -> Dict:
         """
         Get comprehensive career statistics for a specific player across multiple competitions
         
@@ -606,44 +628,47 @@ class StatsBombDataCollector:
             
             logger.info(f"Fetching career data for {player_name} across {len(competitions)} competitions")
             
+            seasons = list(int(i) for i in self.get_competitions()["season_id"].unique() )
+
             for comp_id in competitions:
                 logger.info(f"Processing competition {comp_id}")
-                comp_matches = self.get_matches(competition_id=comp_id, season_id=3)
+                for season in seasons:
+                    comp_matches = self.get_matches(competition_id=comp_id, season_id=season)
                 
-                for _, match in comp_matches.iterrows():
-                    try:
-                        events, _, _, _ = self.get_events(match['match_id'])
-                        player_events = events[events['player_name'] == player_name]
-                        
-                        if not player_events.empty:
-                            # Add competition and match context
-                            player_events['competition_id'] = comp_id
-                            player_events['match_id'] = match['match_id']
-                            player_events['match_date'] = match.get('match_date', 'Unknown')
-                            player_events['home_team'] = match.get('home_team_name', 'Unknown')
-                            player_events['away_team'] = match.get('away_team_name', 'Unknown')
-                            player_events['home_score'] = match.get('home_score', 0)
-                            player_events['away_score'] = match.get('away_score', 0)
+                    for _, match in comp_matches.iterrows():
+                        try:
+                            events, _, _, _ = self.get_events(match['match_id'])
+                            player_events = events[events['player_name'] == player_name]
                             
-                            all_events.append(player_events)
+                            if not player_events.empty:
+                                # Add competition and match context
+                                player_events['competition_id'] = comp_id
+                                player_events['match_id'] = match['match_id']
+                                player_events['match_date'] = match.get('match_date', 'Unknown')
+                                player_events['home_team'] = match.get('home_team_name', 'Unknown')
+                                player_events['away_team'] = match.get('away_team_name', 'Unknown')
+                                player_events['home_score'] = match.get('home_score', 0)
+                                player_events['away_score'] = match.get('away_score', 0)
+                                
+                                all_events.append(player_events)
+                                
+                                # Calculate comprehensive analysis for this match
+                                match_analysis = self.calculate_comprehensive_player_analysis(player_events)
+                                match_analysis['match_id'] = match['match_id']
+                                match_analysis['competition_id'] = comp_id
+                                match_analysis['match_date'] = match.get('match_date', 'Unknown')
+                                match_analysis['home_team'] = match.get('home_team_name', 'Unknown')
+                                match_analysis['away_team'] = match.get('away_team_name', 'Unknown')
+                                match_analysis['home_score'] = match.get('home_score', 0)
+                                match_analysis['away_score'] = match.get('away_score', 0)
+                                
+                                match_analyses.append(match_analysis)
+                                
+                            time.sleep(0.1)  # Rate limiting
                             
-                            # Calculate comprehensive analysis for this match
-                            match_analysis = self.calculate_comprehensive_player_analysis(player_events)
-                            match_analysis['match_id'] = match['match_id']
-                            match_analysis['competition_id'] = comp_id
-                            match_analysis['match_date'] = match.get('match_date', 'Unknown')
-                            match_analysis['home_team'] = match.get('home_team_name', 'Unknown')
-                            match_analysis['away_team'] = match.get('away_team_name', 'Unknown')
-                            match_analysis['home_score'] = match.get('home_score', 0)
-                            match_analysis['away_score'] = match.get('away_score', 0)
-                            
-                            match_analyses.append(match_analysis)
-                            
-                        time.sleep(0.1)  # Rate limiting
-                        
-                    except Exception as e:
-                        logger.warning(f"Error processing match {match.get('match_id', 'Unknown')}: {e}")
-                        continue
+                        except Exception as e:
+                            logger.warning(f"Error processing match {match.get('match_id', 'Unknown')}: {e}")
+                            continue
             
             if not all_events:
                 return {
@@ -873,30 +898,365 @@ class WebScraper:
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         })
+        self.url_base = "https://transfermarket.p.rapidapi.com/"
+        self.api_key = os.getenv('RAPID_API_KEY')
+        
+        if not self.api_key:
+            logger.warning("RAPID_API_KEY not found in environment variables")
     
     def get_transfermarkt_data(self, player_name: str) -> Dict:
-        """Scrape player data from Transfermarkt"""
-        try:
-            # This is a simplified version - in production you'd need proper API access
-            search_url = f"https://www.transfermarkt.com/schnellsuche/ergebnis/schnellsuche?query={player_name}"
-            response = self.session.get(search_url)
+        """
+        Get comprehensive player data from Transfermarkt API
+        
+        Args:
+            player_name: Name of the player to search for
             
-            if response.status_code == 200:
-                soup = BeautifulSoup(response.content, 'html.parser')
-                # Extract relevant data (simplified)
+        Returns:
+            Dictionary containing player profile, transfer history, and performance data
+        """
+        try:
+            if not self.api_key:
                 return {
-                    'market_value': 'N/A',
-                    'contract_until': 'N/A',
-                    'nationality': 'N/A'
+                    'error': 'RAPID_API_KEY not configured',
+                    'player_name': player_name
                 }
+            
+            logger.info(f"Fetching Transfermarkt data for {player_name}")
+            
+            # Step 1: Search for player
+            player_id = self._search_player(player_name)
+            if not player_id:
+                return {
+                    'error': f'Player {player_name} not found on Transfermarkt',
+                    'player_name': player_name
+                }
+            
+            # Step 2: Get player profile
+            profile_data = self._get_player_profile(player_id)
+            
+            # Step 3: Get transfer history
+            transfer_data = self._get_transfer_history(player_id)
+            
+            # Step 4: Get performance data
+            performance_data = self._get_performance_data(player_id, profile_data.get('seasons_played', []))
+            
+            return {
+                'player_name': player_name,
+                'player_id': player_id,
+                'profile': profile_data,
+                'transfer_history': transfer_data,
+                'performance_data': performance_data,
+                'clubs_played_for': self._extract_clubs_from_transfers(transfer_data)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error fetching Transfermarkt data for {player_name}: {e}")
+            return {
+                'error': str(e),
+                'player_name': player_name
+            }
+    
+    def search_players_with_selection(self, player_name: str) -> List[PlayerSearchResult]:
+        """
+        Search for players and return multiple results for user selection
+        
+        Args:
+            player_name: Name of the player to search for
+            
+        Returns:
+            List of PlayerSearchResult objects
+        """
+        try:
+            if not self.api_key:
+                logger.warning("RAPID_API_KEY not configured")
+                return []
+            
+            logger.info(f"Searching for players with name: {player_name}")
+            return self._search_players(player_name)
+            
+        except Exception as e:
+            logger.error(f"Error searching for players with name {player_name}: {e}")
+            return []
+    
+    def get_transfermarkt_data_by_id(self, player_id: str) -> Dict:
+        """
+        Get comprehensive player data from Transfermarkt API using player ID
+        
+        Args:
+            player_id: Transfermarkt player ID
+            
+        Returns:
+            Dictionary containing player profile, transfer history, and performance data
+        """
+        try:
+            if not self.api_key:
+                return {
+                    'error': 'RAPID_API_KEY not configured',
+                    'player_id': player_id
+                }
+            
+            logger.info(f"Fetching Transfermarkt data for player ID: {player_id}")
+            
+            # Step 1: Get player profile
+            profile_data = self._get_player_profile(player_id)
+            
+            # Step 2: Get transfer history
+            transfer_data = self._get_transfer_history(player_id)
+            
+            # Step 3: Get performance data
+            performance_data = self._get_performance_data(player_id, profile_data.get('seasons_played', []))
+            
+            return {
+                'player_id': player_id,
+                'profile': profile_data,
+                'transfer_history': transfer_data,
+                'performance_data': performance_data,
+                'clubs_played_for': self._extract_clubs_from_transfers(transfer_data)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error fetching Transfermarkt data for player ID {player_id}: {e}")
+            return {
+                'error': str(e),
+                'player_id': player_id
+            }
+    
+    def _search_player(self, player_name: str) -> Optional[str]:
+        """Search for player and return player ID (legacy method for single result)"""
+        results = self._search_players(player_name)
+        if results:
+            return results[0].player_id
+        return None
+    
+    def _search_players(self, player_name: str) -> List[PlayerSearchResult]:
+        """Search for players and return multiple results"""
+        try:
+            url = f"{self.url_base}/search"
+            querystring = {"query": player_name, "domain": "en"}
+            
+            headers = {
+                "x-rapidapi-key": self.api_key,
+                "x-rapidapi-host": "transfermarket.p.rapidapi.com"
+            }
+            
+            response = requests.get(url, headers=headers, params=querystring)
+            response.raise_for_status()
+            
+            data = response.json()
+            results = []
+            
+            if isinstance(data, dict) and 'players' in data and isinstance(data['players'], list):
+                for player in data['players']:
+                    # Calculate confidence score based on name similarity
+                    name_similarity = self._calculate_name_similarity(player_name, str(player.get('name', '')))
+                    print(player)
+                    print(type(player), "################")
+                    result = PlayerSearchResult(
+                        player_id=str(player.get('id', '')),
+                        player_name=str(player.get('playerName', '')),
+                        club=str(player.get('club', 'Unknown')),
+                        confidence_score=name_similarity
+                    )
+                    results.append(result)
+                
+                # Sort by confidence score
+                results.sort(key=lambda x: x.confidence_score, reverse=True)
+            
+                logger.info(f"Found {len(results)} players matching '{player_name}'")
             else:
-                return {}
+                logger.warning(f"Unexpected API response format for player search: {data}")
+        
+            return results
                 
         except Exception as e:
-            logger.error(f"Error scraping Transfermarkt data: {e}")
-            return {}
+            logger.error(f"Error searching for player {player_name}: {e}", exc_info=True)
+            return []
     
-    def get_football_api_data(self, player_name: str, api_key: str = None) -> Dict:
+    def _calculate_name_similarity(self, search_name: str, player_name: str) -> float:
+        """Calculate similarity between search name and player name"""
+        search_lower = search_name.lower().strip()
+        player_lower = player_name.lower().strip()
+        
+        # Exact match
+        if search_lower == player_lower:
+            return 1.0
+        
+        # Contains match
+        if search_lower in player_lower or player_lower in search_lower:
+            return 0.8
+        
+        # Word match
+        search_words = set(search_lower.split())
+        player_words = set(player_lower.split())
+        
+        if search_words & player_words:  # Intersection
+            return 0.6
+        
+        return 0.0
+    
+    def _get_player_profile(self, player_id: str) -> Dict:
+        """Get player profile information"""
+        try:
+            url = f"{self.url_base}/players/get-profile"
+            querystring = {"id": player_id, "domain": "en"}
+            
+            headers = {
+                "x-rapidapi-key": self.api_key,
+                "x-rapidapi-host": "transfermarket.p.rapidapi.com"
+            }
+            
+            response = self.session.get(url, headers=headers, params=querystring)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            # Extract seasons played
+            seasons_played = [season["key"] for season in data.get("performanceSeasons", [])]
+            
+            return {
+                'seasons_played': seasons_played,
+                'raw_profile': data
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting player profile for ID {player_id}: {e}")
+            return {'seasons_played': [], 'raw_profile': {}}
+    
+    def _get_transfer_history(self, player_id: str) -> Dict:
+        """Get player transfer history"""
+        try:
+            url = f"{self.url_base}/players/get-transfer-history"
+            querystring = {"id": player_id, "domain": "en"}
+            
+            headers = {
+                "x-rapidapi-key": self.api_key,
+                "x-rapidapi-host": "transfermarket.p.rapidapi.com"
+            }
+            
+            response = self.session.get(url, headers=headers, params=querystring)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            # Extract transfer data
+            transfers = []
+            for transfer in data.get("transferHistory", []):
+                transfers.append({
+                    'old_club': transfer.get("oldClubName"),
+                    'new_club': transfer.get("newClubName"),
+                    'old_club_id': transfer.get("oldClubID"),
+                    'new_club_id': transfer.get("newClubID"),
+                    'date': transfer.get("date"),
+                    'fee': transfer.get("fee"),
+                    'type': transfer.get("type")
+                })
+            
+            return {
+                'transfers': transfers,
+                'total_transfers': len(transfers),
+                'raw_data': data
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting transfer history for ID {player_id}: {e}")
+            return {'transfers': [], 'total_transfers': 0, 'raw_data': {}}
+    
+    def _get_performance_data(self, player_id: str, seasons_played: List[str]) -> Dict:
+        """Get player performance data for all seasons"""
+        try:
+            url = f"{self.url_base}/players/get-performance-summary"
+            
+            all_performance = []
+            
+            for season in seasons_played:
+                try:
+                    querystring = {"id": player_id, "domain": "en", "seasonID": season}
+                    
+                    headers = {
+                        "x-rapidapi-key": self.api_key,
+                        "x-rapidapi-host": "transfermarket.p.rapidapi.com"
+                    }
+                    
+                    response = self.session.get(url, headers=headers, params=querystring)
+                    response.raise_for_status()
+                    
+                    data = response.json()
+                    
+                    # Extract performance data for each competition
+                    for comp_performance in data.get("competitionPerformanceSummery", []):
+                        performance_record = {
+                            'season': season,
+                            'competition': comp_performance.get("competition", {}).get("name"),
+                            'competition_id': comp_performance.get("competition", {}).get("id"),
+                            'club_id': comp_performance.get("clubs", [{}])[0].get("id"),
+                            'club_name': comp_performance.get("clubs", [{}])[0].get("name"),
+                            'is_national_team': comp_performance.get("clubs", [{}])[0].get("nationalTeam") == "x",
+                            'matches': comp_performance.get("performance", {}).get("matches", 0),
+                            'goals': comp_performance.get("performance", {}).get("goals", 0),
+                            'assists': comp_performance.get("performance", {}).get("assists", 0),
+                            'minutes_played': comp_performance.get("performance", {}).get("minutesPlayed", 0),
+                            'minutes_per_goal': comp_performance.get("performance", {}).get("minutesPerGoal", 0),
+                            'penalty_goals': comp_performance.get("performance", {}).get("penaltyGoals", 0),
+                            'yellow_cards': comp_performance.get("performance", {}).get("yellowCards", 0),
+                            'yellow_red_cards': comp_performance.get("performance", {}).get("yellowRedCards", 0),
+                            'red_cards': comp_performance.get("performance", {}).get("redCards", 0),
+                            'to_nil': comp_performance.get("performance", {}).get("toNil", 0),
+                            'conceded_goals': comp_performance.get("performance", {}).get("concededGoals", 0)
+                        }
+                        all_performance.append(performance_record)
+                    
+                    # Rate limiting
+                    time.sleep(0.1)
+                    
+                except Exception as e:
+                    logger.warning(f"Error getting performance data for season {season}: {e}")
+                    continue
+            
+            return {
+                'performance_records': all_performance,
+                'total_seasons': len(seasons_played),
+                'total_competitions': len(all_performance)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting performance data for ID {player_id}: {e}")
+            return {'performance_records': [], 'total_seasons': 0, 'total_competitions': 0}
+    
+    def _extract_clubs_from_transfers(self, transfer_data: Dict) -> List[Dict]:
+        """Extract unique clubs from transfer history"""
+        try:
+            clubs = set()
+            clubs_data = []
+            
+            for transfer in transfer_data.get('transfers', []):
+                if transfer.get('old_club_id'):
+                    clubs.add(transfer['old_club_id'])
+                if transfer.get('new_club_id'):
+                    clubs.add(transfer['new_club_id'])
+            
+            # Convert to list of dictionaries
+            for club_id in clubs:
+                clubs_data.append({
+                    'club_id': club_id,
+                    'club_name': self._get_club_name_from_transfers(club_id, transfer_data.get('transfers', []))
+                })
+            
+            return clubs_data
+            
+        except Exception as e:
+            logger.error(f"Error extracting clubs from transfers: {e}")
+            return []
+    
+    def _get_club_name_from_transfers(self, club_id: str, transfers: List[Dict]) -> str:
+        """Get club name from transfer history"""
+        for transfer in transfers:
+            if transfer.get('old_club_id') == club_id:
+                return transfer.get('old_club', 'Unknown')
+            if transfer.get('new_club_id') == club_id:
+                return transfer.get('new_club', 'Unknown')
+        return 'Unknown'
+    
+    def get_football_api_data(self, player_name: str, api_key: Optional[str] = None) -> Dict:
         """Get data from football API (if available)"""
         if not api_key:
             return {}
@@ -916,6 +1276,111 @@ class WebScraper:
         except Exception as e:
             logger.error(f"Error fetching football API data: {e}")
             return {}
+    
+    def get_player_career_summary(self, player_name: str) -> Dict:
+        """
+        Get a summary of player career from Transfermarkt data
+        
+        Args:
+            player_name: Name of the player to analyze
+            
+        Returns:
+            Dictionary with career summary statistics
+        """
+        try:
+            transfermarkt_data = self.get_transfermarkt_data(player_name)
+            
+            if 'error' in transfermarkt_data:
+                return transfermarkt_data
+            
+            # Calculate career summary
+            performance_data = transfermarkt_data.get('performance_data', {})
+            transfer_data = transfermarkt_data.get('transfer_history', {})
+            
+            career_summary = {
+                'player_name': player_name,
+                'total_seasons': performance_data.get('total_seasons', 0),
+                'total_competitions': performance_data.get('total_competitions', 0),
+                'total_transfers': transfer_data.get('total_transfers', 0),
+                'total_clubs': len(transfermarkt_data.get('clubs_played_for', [])),
+                'career_stats': self._calculate_career_stats(performance_data.get('performance_records', [])),
+                'transfer_summary': self._calculate_transfer_summary(transfer_data.get('transfers', []))
+            }
+            
+            return career_summary
+            
+        except Exception as e:
+            logger.error(f"Error calculating career summary for {player_name}: {e}")
+            return {
+                'error': str(e),
+                'player_name': player_name
+            }
+    
+    def _calculate_career_stats(self, performance_records: List[Dict]) -> Dict:
+        """Calculate career statistics from performance records"""
+        try:
+            total_matches = sum(record.get('matches', 0) for record in performance_records)
+            total_goals = sum(record.get('goals', 0) for record in performance_records)
+            total_assists = sum(record.get('assists', 0) for record in performance_records)
+            total_minutes = sum(record.get('minutes_played', 0) for record in performance_records)
+            total_yellow_cards = sum(record.get('yellow_cards', 0) for record in performance_records)
+            total_red_cards = sum(record.get('red_cards', 0) for record in performance_records)
+            
+            return {
+                'total_matches': total_matches,
+                'total_goals': total_goals,
+                'total_assists': total_assists,
+                'total_minutes': total_minutes,
+                'total_yellow_cards': total_yellow_cards,
+                'total_red_cards': total_red_cards,
+                'avg_goals_per_match': total_goals / total_matches if total_matches > 0 else 0,
+                'avg_assists_per_match': total_assists / total_matches if total_matches > 0 else 0,
+                'avg_minutes_per_match': total_minutes / total_matches if total_matches > 0 else 0,
+                'minutes_per_goal': total_minutes / total_goals if total_goals > 0 else 0
+            }
+            
+        except Exception as e:
+            logger.error(f"Error calculating career stats: {e}")
+            return {}
+    
+    def _calculate_transfer_summary(self, transfers: List[Dict]) -> Dict:
+        """Calculate transfer history summary"""
+        try:
+            if not transfers:
+                return {}
+            
+            # Calculate transfer fees
+            total_fees = 0
+            free_transfers = 0
+            loan_transfers = 0
+            
+            for transfer in transfers:
+                fee = transfer.get('fee', '')
+                if fee and fee != 'free transfer':
+                    # Try to extract numeric value from fee string
+                    try:
+                        if '€' in fee:
+                            fee_value = fee.replace('€', '').replace(',', '').replace('m', '000000').replace('k', '000')
+                            total_fees += float(fee_value)
+                    except:
+                        pass
+                elif fee == 'free transfer':
+                    free_transfers += 1
+                elif 'loan' in fee.lower():
+                    loan_transfers += 1
+            
+            return {
+                'total_transfers': len(transfers),
+                'free_transfers': free_transfers,
+                'loan_transfers': loan_transfers,
+                'estimated_total_fees': total_fees,
+                'first_transfer_date': min(transfer.get('date', '9999') for transfer in transfers),
+                'last_transfer_date': max(transfer.get('date', '0000') for transfer in transfers)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error calculating transfer summary: {e}")
+            return {}
 
 class DataAggregator:
     """Aggregates data from multiple sources"""
@@ -924,7 +1389,7 @@ class DataAggregator:
         self.statsbomb = StatsBombDataCollector()
         self.web_scraper = WebScraper()
     
-    def get_complete_player_profile(self, player_name: str, match_id: int = None) -> Dict:
+    def get_complete_player_profile(self, player_name: str, match_id: Optional[int] = None) -> Dict:
         """Get complete player profile from all available sources"""
         
         profile = {
@@ -936,17 +1401,18 @@ class DataAggregator:
         
         # Get StatsBomb career data
         career_data = self.statsbomb.get_player_career_data(player_name)
-        if not career_data.empty:
-            profile['statsbomb_data']['career'] = career_data.to_dict('records')
+        if career_data and 'error' not in career_data:
+            profile['statsbomb_data']['career'] = career_data
             
-            # Calculate aggregated metrics
-            profile['statsbomb_data']['aggregated_metrics'] = self._calculate_aggregated_metrics(career_data)
+            # Calculate aggregated metrics if we have raw events
+            if 'raw_events' in career_data and not career_data['raw_events'].empty:
+                profile['statsbomb_data']['aggregated_metrics'] = self._calculate_aggregated_metrics(career_data['raw_events'])
         
         # Get match-specific data if provided
         if match_id:
             match_data = self.statsbomb.get_player_stats(match_id, player_name)
-            if not match_data.empty:
-                profile['match_specific_data'] = match_data.to_dict('records')
+            if match_data and 'error' not in match_data:
+                profile['match_specific_data'] = match_data
         
         # Get web-scraped data
         profile['web_data'] = self.web_scraper.get_transfermarkt_data(player_name)
@@ -985,4 +1451,6 @@ class DataAggregator:
         except Exception as e:
             logger.error(f"Error calculating aggregated metrics: {e}")
         
-        return metrics 
+        return metrics
+
+ 
