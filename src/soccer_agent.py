@@ -288,9 +288,9 @@ class SoccerAgent:
                 
                 if performance.get('performance_records'):
                     logger.debug("Adding performance statistics to report")
-                    total_matches = sum(record.get('matches', 0) for record in performance['performance_records'])
-                    total_goals = sum(record.get('goals', 0) for record in performance['performance_records'])
-                    total_assists = sum(record.get('assists', 0) for record in performance['performance_records'])
+                    total_matches = sum(int(record.get('matches', 0)) for record in performance['performance_records'])
+                    total_goals = sum(int(record.get('goals', 0)) for record in performance['performance_records'])
+                    total_assists = sum(int(record.get('assists', 0)) for record in performance['performance_records'])
                     
                     report += f"🎯 Total matches: {total_matches}\n"
                     report += f"⚽ Total goals: {total_goals}\n"
