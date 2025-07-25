@@ -21,11 +21,11 @@ from langchain.memory import ConversationTokenBufferMemory
 from langchain_core.runnables import RunnableWithMessageHistory
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, HumanMessagePromptTemplate
 from langchain_core.chat_history import BaseChatMessageHistory
-from langchain.memory.chat_message_histories import ChatMessageHistory
+from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_openai import ChatOpenAI
 from langchain.schema import HumanMessage, AIMessage
 
-from src.data_collector import StatsBombDataCollector, WebScraper, PlayerSearchResult
+from src.data_collector import WebScraper, LocalDataReader, PlayerSearchResult
 
 # Enhanced logging configuration
 logging.basicConfig(
@@ -410,9 +410,19 @@ Do you confirm that you want to analyze this player? Respond 'yes' to continue o
 class SoccerAgent:
     """Main conversational agent for football player analysis"""
     
-    def __init__(self):
-        self.statsbomb_collector = StatsBombDataCollector()
-        self.web_scraper = WebScraper()
+    def __init__(self, use_local_data: bool = True):
+        """Initialize the agent with data source preference"""
+        self.use_local_data = use_local_data
+        
+        if use_local_data:
+            logger.info("Initializing agent with local data reader")
+            self.data_reader = LocalDataReader()
+            self.web_scraper = None  # Don't initialize WebScraper if using local data
+        else:
+            logger.warning("Using deprecated WebScraper. Consider switching to local data.")
+            self.data_reader = None
+            self.web_scraper = WebScraper()
+        
         self.user_sessions: Dict[str, LangChainConversationManager] = {}
     
     def handle_message(self, user_id: str, message: str) -> str:
@@ -483,17 +493,34 @@ class SoccerAgent:
             temp_session = LangChainConversationManager()
             
             response = temp_session.get_response(
-                f"""Determine if this message is a follow-up question about a player or a new player search request.
-                
-                Message: "{message}"
-                
-                Rules for classification:
-                1. Follow-up questions ask for more details about the same player
-                2. New search requests ask to find or look up a different player
-                3. When in doubt, classify as a new search
-                
-                Respond with ONLY one word: 'follow-up' or 'new-search'
-                """,
+                f"""Determine if this message is asking for additional information about a previously selected player.
+
+Message: "{message}"
+
+Common follow-up patterns:
+1. Questions about specific aspects (transfers, stats, career, etc.)
+2. Requests for more details or information
+3. Questions about history or achievements
+4. Comparisons with previous seasons/clubs
+5. Questions about specific time periods
+
+Examples of follow-ups:
+- "List all his transfers"
+- "Show me his career statistics"
+- "What about his performance last season?"
+- "How many goals did he score?"
+- "Tell me more about his achievements"
+- "When did he join his current club?"
+
+Examples of new searches:
+- "Search for Ronaldo"
+- "Find me Haaland"
+- "Look up Mbappé"
+- "Show me info about Salah"
+- "What about Benzema?"
+
+Respond with ONLY one word: 'follow-up' or 'new-search'
+""",
                 ConversationState.COMPLETED,
                 {}
             )
@@ -527,14 +554,34 @@ class SoccerAgent:
                 f"""Answer this specific question about {player.player_name}:
                 "{question}"
                 
-                Base your answer on these current stats:
+                Available player data:
                 {essential_data}
                 
-                Keep the response focused and under 1000 characters.
+                Raw transfer history:
+                {session.player_data.get('transfer_history', {})}
+                
+                Raw performance data:
+                {session.player_data.get('performance_data', {})}
+                
+                Raw profile data:
+                {session.player_data.get('profile', {})}
+                
+                Instructions:
+                1. Focus specifically on answering the asked question
+                2. Use all relevant data from the provided information
+                3. Format the response clearly using markdown
+                4. If the question is about transfers, list each transfer with dates
+                5. If the question is about statistics, provide specific numbers
+                6. If the question is about career progression, provide chronological information
+                
+                Keep the response focused and under 2000 characters.
                 """,
                 ConversationState.COMPLETED,
                 {}
             )
+            
+            # Keep the session in COMPLETED state for more follow-ups
+            session.current_state = ConversationState.COMPLETED
             
             return response
             
@@ -595,9 +642,13 @@ class SoccerAgent:
             player_name = self._extract_player_name(message)
             logger.info(f"Extracted player name: {player_name} from message: {message}")
             
-            # Perform actual search
-            logger.debug(f"Calling web scraper search for query: {player_name}")
-            search_results = self.web_scraper.search_players_with_selection(player_name)
+            # Perform search using appropriate data source
+            logger.debug(f"Searching for player: {player_name}")
+            if self.use_local_data:
+                search_results = self.data_reader.search_players(player_name)
+            else:
+                search_results = self.web_scraper.search_players_with_selection(player_name)
+            
             logger.info(f"Found {len(search_results)} players matching query: {player_name}")
             
             # Log search results for debugging
@@ -636,21 +687,24 @@ class SoccerAgent:
                 not session.selected_player or 
                 session.selected_player.player_id != selected_player.player_id):
                 
-                logger.debug(f"Fetching Transfermarkt data for player ID: {selected_player.player_id}")
-                transfermarkt_data = self.web_scraper.get_transfermarkt_data_by_id(selected_player.player_id)
+                logger.debug(f"Fetching data for player ID: {selected_player.player_id}")
+                if self.use_local_data:
+                    player_data = self.data_reader.get_player_data(selected_player.player_id)
+                else:
+                    player_data = self.web_scraper.get_transfermarkt_data_by_id(selected_player.player_id)
                 
-                if not transfermarkt_data:
-                    raise Exception("Could not fetch Transfermarkt data for player")
+                if not player_data:
+                    raise Exception("Could not fetch player data")
                 
                 # Store the data in session
-                session.player_data = transfermarkt_data
+                session.player_data = player_data
                 session.selected_player = selected_player
             else:
                 logger.debug(f"Using cached data for player {selected_player.player_name}")
-                transfermarkt_data = session.player_data
+                player_data = session.player_data
 
             # Extract essential data
-            essential_data = self._extract_essential_data(transfermarkt_data)
+            essential_data = self._extract_essential_data(player_data)
             
             # Ensure we're in COMPLETED state
             session.current_state = ConversationState.COMPLETED

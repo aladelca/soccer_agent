@@ -1,14 +1,14 @@
 # Soccer Agent - Intelligent Football Player Analysis
 
-An intelligent conversational agent for comprehensive football player analysis using StatsBomb data, Transfermarkt information, and advanced analytics.
+An intelligent conversational agent for comprehensive football player analysis using local player data and advanced analytics.
 
 ## 🚀 Features
 
 - **Conversational Interface**: Interactive agent that handles multiple search results and user selection
-- **Player Performance Analysis**: Complete evaluation of a player's performance using StatsBomb data
+- **Player Performance Analysis**: Complete evaluation of a player's performance using comprehensive statistics
 - **Career Statistics**: Comprehensive career overview with aggregated metrics
-- **Transfer Market Data**: Player market value and transfer history from Transfermarkt
-- **Multi-Source Data**: StatsBomb Open Data + Transfermarkt + web scraping
+- **Transfer History**: Player transfer history and career progression
+- **Multi-Source Data**: Rich player database with career statistics and transfer information
 - **Session Management**: Maintains conversation state for multiple users
 - **Telegram Bot Support**: Ready-to-use Telegram bot implementation
 
@@ -16,7 +16,7 @@ An intelligent conversational agent for comprehensive football player analysis u
 
 - Python 3.8+
 - OpenAI API Key
-- Internet connection for StatsBomb data
+- Local data files (provided in data/ directory)
 
 ## 🛠️ Installation
 
@@ -36,16 +36,12 @@ pip install -r requirements.txt
 cp env_example.txt .env
 ```
 
-Edit the `.env` file and add your API keys:
+Edit the `.env` file and add your API key:
 ```
-# Optional: For Transfermarkt data
-RAPID_API_KEY=your_rapidapi_key_here
+OPENAI_API_KEY=your_openai_api_key_here
 
 # Optional: For Telegram bot
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
-
-# Optional: For future ML features
-OPENAI_API_KEY=your_openai_api_key_here
 ```
 
 ## 🎯 Quick Start
@@ -148,17 +144,31 @@ soccer_agent/
 
 ## 📈 Data Sources
 
-### StatsBomb Open Data
-- Match events and player actions
-- Detailed player metrics and statistics
-- Tactical data and formations
-- Competition and match information
+### Player Scores Dataset
+The project uses the comprehensive ["Player Scores"](https://www.kaggle.com/datasets/davidcariboo/player-scores/data) dataset from Kaggle, created by David Cariboo. This dataset includes:
 
-### Transfermarkt
-- Player market values
-- Transfer history and career moves
-- Club performance data
-- Contract information and valuations
+- **Player Information**: Basic details and demographics
+- **Career Statistics**: Comprehensive match and performance data
+- **Transfer History**: Historical transfer information
+- **Club Data**: Team affiliations and performance
+
+The dataset provides a rich source of football statistics and is regularly updated. Special thanks to David Cariboo for making this valuable data available to the community.
+
+Dataset files used:
+- players.csv: Player basic information
+- appearances.csv: Match appearances and performance
+- clubs.csv: Club information
+- transfers.csv: Transfer history
+
+### Data Structure
+The data is organized in CSV files with the following key information:
+- Player demographics and career details
+- Match-by-match performance statistics
+- Complete transfer history
+- Club affiliations and statistics
+
+### Data Updates
+The local data can be updated by downloading the latest version from the Kaggle dataset. The agent is designed to work with the data format provided in this dataset.
 
 ## 🤖 Conversational Features
 
